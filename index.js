@@ -1,47 +1,83 @@
 const express = require("express");
-const { Client, LocalAuth } = require("whatsapp-web.js");
-const qrcode = require("qrcode-terminal");
-const app = express();
-const PORT = process.env.PORT || 3000;
-app.use(express.json());
+const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason, makeInMemoryStore } = require("baileys");
+const { Boom } = require("@hapi/boom");
+const qrcode = require("qrcode");
 
-const client = new Client({
-  authStrategy: new LocalAuth({ dataPath: "./session" }),
-  puppeteer: {
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    executablePath: process.env.CHROME_PATH || "/usr/bin/chromium"
-  },
-  qrMaxRetries: 10
-});
+(async () => {
+  const app = express();
+  const PORT = process.env.PORT || 3000;
+  app.use(express.json());
 
-client.on("qr", qr => {
-  console.log("Scan QR berikut:");
-  qrcode.generate(qr, { small: true });
-});
+  const { state, saveCreds } = await useMultiFileAuthState("./baileys_auth");
 
-client.on("ready", () => {
-  console.log("✅ WhatsApp client siap!");
-});
+  const { version } = await fetchLatestBaileysVersion();
+  console.log("Using WA version", version);
 
-client.on("auth_failure", msg => {
-  console.error("⚠️ Authentication failure:", msg);
-});
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    printQRInTerminal: false
+  });
 
-app.get("/", (req, res) => res.send({ status: "running" }));
+  const store = makeInMemoryStore({});
 
-app.post("/send-message", async (req, res) => {
-  const { number, message } = req.body;
-  if (!number || !message) return res.status(400).send({ error: "Missing number or message" });
-  const chatId = number.includes("@c.us") ? number : `${number}@c.us`;
-  try {
-    await client.sendMessage(chatId, message);
-    res.send({ status: "sent", number, message });
-  } catch (err) {
-    console.error("Send error:", err);
-    res.status(500).send({ error: err.message });
-  }
-});
+  store.bind(sock.ev);
 
-client.initialize();
-app.listen(PORT, () => console.log(`Server http://localhost:${PORT}`));
+  sock.ev.on("creds.update", saveCreds);
+
+  sock.ev.on("connection.update", async (update) => {
+    const { connection, lastDisconnect, qr } = update;
+
+    if (qr) {
+      // buat QR image lalu simpan base64 di mem
+      const imageUrl = await qrcode.toDataURL(qr);
+      latestQR = imageUrl;
+    }
+    if (connection === "close") {
+      const code = (lastDisconnect.error)?.output?.statusCode;
+      if (code !== DisconnectReason.loggedOut) {
+        console.log("Reconnect karena", lastDisconnect.error);
+        startSock();
+      } else {
+        console.log("🔴 Logout dari WhatsApp");
+      }
+    } else if (connection === "open") {
+      console.log("✅ WhatsApp tersambung");
+    }
+  });
+
+  let latestQR = null;
+
+  app.get("/", (req, res) => {
+    res.json({ status: "running" });
+  });
+
+  app.get("/qr", (req, res) => {
+    if (!latestQR) {
+      return res.status(404).send("QR belum siap, silakan cek ulang sebentar lagi.");
+    }
+    res.send(`
+      <html><body>
+        <h3>Scan QR WhatsApp (sekali saja)</h3>
+        <img src="${latestQR}" />
+      </body></html>
+    `);
+  });
+
+  app.post("/send-message", async (req, res) => {
+    const { number, message } = req.body;
+    if (!number || !message) {
+      return res.status(400).json({ error: "Missing number or message" });
+    }
+    const jid = number.includes("@s.whatsapp.net") ? number : `${number}@s.whatsapp.net`;
+    try {
+      await sock.sendMessage(jid, { text: message });
+      res.json({ status: "sent", number, message });
+    } catch (err) {
+      console.error("Send error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.listen(PORT, () => console.log(`🚀 API ready at http://localhost:${PORT}`));
+})();
