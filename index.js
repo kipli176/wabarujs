@@ -2,10 +2,12 @@ const express = require("express");
 const {
   default: makeWASocket,
   useMultiFileAuthState,
-  fetchLatestBaileysVersion,
   DisconnectReason,
 } = require("baileys");
 const qrcode = require("qrcode");
+
+// Gunakan versi WA Web stabil (hindari fetchLatestBaileysVersion)
+const WA_VERSION = [2, 3000, 82]; // Versi ini stabil per Juli 2025
 
 (async () => {
   const app = express();
@@ -13,15 +15,13 @@ const qrcode = require("qrcode");
   app.use(express.json());
 
   const { state, saveCreds } = await useMultiFileAuthState("./baileys_auth");
-  const { version } = await fetchLatestBaileysVersion();
-  console.log("✅ Using WhatsApp Web version:", version);
 
   let latestQR = null;
   let lastQRGeneratedAt = null;
   let waReady = false;
 
   const sock = makeWASocket({
-    version,
+    version: WA_VERSION,
     auth: state,
     printQRInTerminal: false,
   });
@@ -62,10 +62,10 @@ const qrcode = require("qrcode");
     }
   });
 
-  // Healthcheck
-  app.get("/", (req, res) => res.send("✅ Bot is running"));
+  // Health check
+  app.get("/", (req, res) => res.send("✅ WhatsApp bot aktif"));
 
-  // Status endpoint
+  // Endpoint status
   app.get("/status", (req, res) => {
     res.json({
       wa_connected: waReady,
@@ -74,9 +74,14 @@ const qrcode = require("qrcode");
     });
   });
 
-  // Serve QR page
+  // QR code page
   app.get("/qr", (req, res) => {
-    if (!latestQR) return res.status(404).send("QR belum siap atau sudah login.");
+    if (!latestQR) {
+      return res
+        .status(404)
+        .send("QR belum tersedia atau sudah terkoneksi.");
+    }
+
     res.send(`
       <html>
         <body>
@@ -88,7 +93,7 @@ const qrcode = require("qrcode");
     `);
   });
 
-  // Send message endpoint
+  // Kirim pesan
   app.post("/send-message", async (req, res) => {
     if (!waReady) {
       return res.status(503).json({
@@ -97,8 +102,11 @@ const qrcode = require("qrcode");
     }
 
     const { number, message } = req.body;
+
     if (!number || !message) {
-      return res.status(400).json({ error: "Missing number or message" });
+      return res
+        .status(400)
+        .json({ error: "Harap sertakan 'number' dan 'message'." });
     }
 
     const jid = number.includes("@s.whatsapp.net")
@@ -109,7 +117,7 @@ const qrcode = require("qrcode");
       await sock.sendMessage(jid, { text: message });
       res.json({ status: "sent", number, message });
     } catch (err) {
-      console.error("❌ Gagal kirim:", err.message);
+      console.error("❌ Gagal kirim pesan:", err.message);
       res.status(500).json({ error: err.message });
     }
   });
