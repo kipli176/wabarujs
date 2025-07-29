@@ -1,15 +1,3 @@
-/**
- * index.js
- *
- * Server Node.js untuk mengirim pesan WhatsApp melalui endpoint JSON /send-message
- * Menggunakan whatsapp-web.js versi terbaru dengan LocalAuth dan guard client ready
- *
- * Langkah:
- * 1. Buat file ini sebagai index.js
- * 2. Jalankan `npm install`
- * 3. Jalankan `npm start` atau `node index.js`
- */
-
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const express = require('express');
@@ -66,7 +54,7 @@ app.post('/send-message', async (req, res) => {
         return res.status(400).json({ status: 'error', message: 'Nomor dan pesan wajib diisi.' });
     }
 
-    // Format nomor: e.g. '6281234567890' -> '6281234567890@c.us'
+    // Format nomor: '6281234567890' -> '6281234567890@c.us'
     const chatId = number.includes('@c.us') ? number : `${number}@c.us`;
     try {
         const sent = await client.sendMessage(chatId, message);
