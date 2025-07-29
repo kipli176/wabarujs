@@ -1,12 +1,15 @@
-FROM node:24-alpine
+# Dockerfile
+FROM node:22-alpine
 
-RUN apk add --no-cache git openssh
+# Install git (needed by some npm packages)
+RUN apk add --no-cache git
 
 WORKDIR /app
 
-RUN npm init -y
-RUN npm install @whiskeysockets/baileys@6.7.18 qrcode-terminal@0.12.0
+# Initialize npm project and install dependencies
+RUN npm init -y \
+  && npm install @whiskeysockets/baileys@6.7.18 qrcode-terminal@0.12.0
 
-COPY . .
+COPY index.mjs .
 
-CMD ["node", "index.js"]
+CMD ["node", "index.mjs"]
