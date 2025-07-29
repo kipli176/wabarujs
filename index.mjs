@@ -1,15 +1,13 @@
 // index.mjs
-import makeWASocket, {
-  useMultiFileAuthState,
-  DisconnectReason,
-  Browsers,
-} from '@whiskeysockets/baileys';
+import * as baileys from '@whiskeysockets/baileys';
 import qrcode from 'qrcode-terminal';
+
+const { useMultiFileAuthState, DisconnectReason, Browsers } = baileys;
 
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
 
-  const sock = makeWASocket({
+  const sock = baileys.makeWASocket({
     auth: state,
     printQRInTerminal: true,
     browser: Browsers.ubuntu('BaileysAlpine'),

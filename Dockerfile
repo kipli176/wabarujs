@@ -1,5 +1,5 @@
 # Dockerfile
-FROM node:22-alpine
+FROM node:20-alpine
 
 # Install git (needed by some npm packages)
 RUN apk add --no-cache git
