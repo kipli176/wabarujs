@@ -6,8 +6,8 @@ const {
 } = require("baileys");
 const qrcode = require("qrcode");
 
-// Gunakan versi WA Web yang stabil
-const WA_VERSION = [2, 3000, 82]; // Bisa disesuaikan jika update besar
+// Versi WA Web stabil (hindari fetchLatest)
+const WA_VERSION = [2, 3000, 82];
 
 let sock;
 let waReady = false;
@@ -17,11 +17,12 @@ let lastQRGeneratedAt = null;
 async function startSock() {
   const { state, saveCreds } = await useMultiFileAuthState("./baileys_auth");
 
+  sock?.ev.removeAllListeners();
   sock = makeWASocket({
     version: WA_VERSION,
     auth: state,
     printQRInTerminal: false,
-    browser: ["Mac OS", "Safari", "16.0.2"] // Ganti identitas browser
+    browser: ["Mac OS", "Safari", "16.0.2"], // identitas browser disamarkan sebagai Safari macOS
   });
 
   sock.ev.on("creds.update", saveCreds);
@@ -40,19 +41,19 @@ async function startSock() {
       waReady = true;
       latestQR = null;
       lastQRGeneratedAt = null;
-      console.log("✅ WhatsApp tersambung dan siap digunakan.");
+      console.log("✅ WhatsApp tersambung.");
     }
 
     if (connection === "close") {
       waReady = false;
       const reason = (lastDisconnect?.error)?.output?.statusCode;
-      console.log("🔴 WhatsApp terputus. Reason code:", reason);
+      console.log("🔴 Koneksi WA terputus. Reason code:", reason);
 
       if (reason === DisconnectReason.loggedOut) {
-        console.log("❌ Anda logout dari WhatsApp. Harus scan QR ulang.");
+        console.log("❌ Session WA logout. QR baru wajib discan.");
       } else {
-        console.log("🔄 Mencoba koneksi ulang...");
-        startSock(); // Reinitialize
+        console.log("🔄 Mencoba reconnect otomatis...");
+        await startSock();
       }
     }
 
@@ -62,22 +63,25 @@ async function startSock() {
   });
 }
 
-// Mulai aplikasi Express
 (async () => {
   const app = express();
-  const PORT = process.env.PORT || 3000;
   app.use(express.json());
+  const PORT = process.env.PORT || 3000;
 
   await startSock();
 
-  // Endpoint QR
-  app.get("/qr", (req, res) => {
-    if (!latestQR) {
-      return res
-        .status(404)
-        .send("QR belum tersedia atau sudah terkoneksi.");
-    }
+  app.get("/", (req, res) => res.send("✅ WA bot aktif"));
 
+  app.get("/status", (req, res) => {
+    res.json({
+      wa_connected: waReady,
+      qr_ready: !!latestQR,
+      last_qr_updated: lastQRGeneratedAt,
+    });
+  });
+
+  app.get("/qr", (req, res) => {
+    if (!latestQR) return res.status(404).send("QR belum tersedia atau sudah konek.");
     res.send(`
       <html>
         <body>
@@ -89,47 +93,24 @@ async function startSock() {
     `);
   });
 
-  // Endpoint status
-  app.get("/status", (req, res) => {
-    res.json({
-      wa_connected: waReady,
-      qr_ready: !!latestQR,
-      last_qr_updated: lastQRGeneratedAt,
-    });
-  });
-
-  // Endpoint kirim pesan
   app.post("/send-message", async (req, res) => {
     if (!waReady) {
-      return res.status(503).json({
-        error: "WhatsApp belum terkoneksi. Scan QR terlebih dahulu.",
-      });
+      return res.status(503).json({ error: "WA belum terkoneksi. Scan QR dahulu." });
     }
 
     const { number, message } = req.body;
-    if (!number || !message) {
-      return res
-        .status(400)
-        .json({ error: "Harap sertakan 'number' dan 'message'." });
-    }
+    if (!number || !message) return res.status(400).json({ error: "Missing number or message" });
 
-    const jid = number.includes("@s.whatsapp.net")
-      ? number
-      : `${number}@s.whatsapp.net`;
+    const jid = number.includes("@s.whatsapp.net") ? number : `${number}@s.whatsapp.net`;
 
     try {
       await sock.sendMessage(jid, { text: message });
       res.json({ status: "sent", number, message });
     } catch (err) {
-      console.error("❌ Gagal kirim pesan:", err.message);
+      console.error("❌ Gagal kirim:", err.message);
       res.status(500).json({ error: err.message });
     }
   });
 
-  // Health check
-  app.get("/", (req, res) => res.send("✅ WhatsApp bot aktif"));
-
-  app.listen(PORT, () =>
-    console.log(`🚀 Server berjalan di http://localhost:${PORT}`)
-  );
+  app.listen(PORT, () => console.log(`🚀 Server berjalan di http://localhost:${PORT}`));
 })();
