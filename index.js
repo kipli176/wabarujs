@@ -17,9 +17,21 @@ const express = require('express');
 const app = express();
 app.use(express.json());
 
-// Inisialisasi client WhatsApp dengan LocalAuth untuk penyimpanan sesi otomatis
+// Inisialisasi client WhatsApp dengan LocalAuth dan opsi Puppeteer
 const client = new Client({
-    authStrategy: new LocalAuth()
+    authStrategy: new LocalAuth(),
+    puppeteer: {
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-extensions',
+            '--disable-gpu',
+            '--window-size=1280,800'
+        ]
+    }
 });
 
 client.on('qr', qr => {
