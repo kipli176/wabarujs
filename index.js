@@ -1,28 +1,22 @@
 const express = require("express");
-const {
-  default: makeWASocket,
-  useMultiFileAuthState,
-  DisconnectReason,
-} = require("baileys");
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require("baileys");
 const qrcode = require("qrcode");
 
-// Versi WA Web stabil (hindari fetchLatest)
-const WA_VERSION = [2, 3000, 82];
+const WA_VERSION = [2, 3000, 82];  // Versi Web WA stabil
 
-let sock;
-let waReady = false;
-let latestQR = null;
-let lastQRGeneratedAt = null;
+let sock, waReady = false, latestQR = null, lastQRGenAt = null;
+let retryCount = 0, maxRetries = 3;
 
 async function startSock() {
   const { state, saveCreds } = await useMultiFileAuthState("./baileys_auth");
 
-  sock?.ev.removeAllListeners();
+  if (sock) sock.ev.removeAllListeners();
+
   sock = makeWASocket({
     version: WA_VERSION,
     auth: state,
     printQRInTerminal: false,
-    browser: ["Mac OS", "Safari", "16.0.2"], // identitas browser disamarkan sebagai Safari macOS
+    browser: ["Mac OS", "Safari", "16.0.2"]
   });
 
   sock.ev.on("creds.update", saveCreds);
@@ -32,33 +26,37 @@ async function startSock() {
 
     if (qr) {
       latestQR = await qrcode.toDataURL(qr);
-      lastQRGeneratedAt = new Date().toISOString();
+      lastQRGenAt = new Date().toISOString();
       waReady = false;
-      console.log("🟡 QR diperbarui. Silakan scan ulang.");
+      console.log("🟡 QR diperbarui, scan ulang");
     }
 
     if (connection === "open") {
       waReady = true;
       latestQR = null;
-      lastQRGeneratedAt = null;
-      console.log("✅ WhatsApp tersambung.");
+      lastQRGenAt = null;
+      retryCount = 0;
+      console.log("✅ WhatsApp connected");
     }
 
     if (connection === "close") {
       waReady = false;
-      const reason = (lastDisconnect?.error)?.output?.statusCode;
-      console.log("🔴 Koneksi WA terputus. Reason code:", reason);
+      const code = (lastDisconnect?.error)?.output?.statusCode;
+      console.log("🔴 Connection closed. Code:", code);
 
-      if (reason === DisconnectReason.loggedOut) {
-        console.log("❌ Session WA logout. QR baru wajib discan.");
+      if (code === DisconnectReason.loggedOut) {
+        console.log("❌ Logout detected. QR baru harus discan.");
+      } else if (retryCount < maxRetries) {
+        retryCount++;
+        console.log(`🔄 Retry ${retryCount}/${maxRetries} in 5s`);
+        setTimeout(startSock, 5000);
       } else {
-        console.log("🔄 Mencoba reconnect otomatis...");
-        await startSock();
+        console.log("⚠️ Max retries reached. Stop reconnecting.");
       }
     }
 
     if (isOnline !== undefined) {
-      console.log("🌐 Status koneksi:", isOnline ? "Online" : "Offline");
+      console.log("🌐 Online status:", isOnline);
     }
   });
 }
@@ -70,47 +68,32 @@ async function startSock() {
 
   await startSock();
 
-  app.get("/", (req, res) => res.send("✅ WA bot aktif"));
+  app.get("/", (req, res) => res.send("✅ Bot berjalan"));
 
-  app.get("/status", (req, res) => {
-    res.json({
-      wa_connected: waReady,
-      qr_ready: !!latestQR,
-      last_qr_updated: lastQRGeneratedAt,
-    });
-  });
+  app.get("/status", (_, res) => res.json({
+    wa_connected: waReady,
+    qr_ready: !!latestQR,
+    last_qr_updated: lastQRGenAt
+  }));
 
-  app.get("/qr", (req, res) => {
-    if (!latestQR) return res.status(404).send("QR belum tersedia atau sudah konek.");
-    res.send(`
-      <html>
-        <body>
-          <h2>Scan QR WhatsApp</h2>
-          <img src="${latestQR}" />
-          <p>Diperbarui: ${lastQRGeneratedAt}</p>
-        </body>
-      </html>
-    `);
+  app.get("/qr", (_, res) => {
+    if (!latestQR) return res.status(404).send("QR tidak tersedia");
+    res.send(`<html><body><img src="${latestQR}"/><p>Last: ${lastQRGenAt}</p></body></html>`);
   });
 
   app.post("/send-message", async (req, res) => {
-    if (!waReady) {
-      return res.status(503).json({ error: "WA belum terkoneksi. Scan QR dahulu." });
-    }
-
+    if (!waReady) return res.status(503).json({ error: "WA belum terkoneksi" });
     const { number, message } = req.body;
     if (!number || !message) return res.status(400).json({ error: "Missing number or message" });
-
-    const jid = number.includes("@s.whatsapp.net") ? number : `${number}@s.whatsapp.net`;
-
+    const jid = number.includes("@s.whatsapp.net") ? number : number + "@s.whatsapp.net";
     try {
       await sock.sendMessage(jid, { text: message });
       res.json({ status: "sent", number, message });
     } catch (err) {
-      console.error("❌ Gagal kirim:", err.message);
+      console.error("Send error:", err.message);
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.listen(PORT, () => console.log(`🚀 Server berjalan di http://localhost:${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Server listening on port ${PORT}`));
 })();
