@@ -1,12 +1,9 @@
 FROM node:18-slim
 
-# Set direktori kerja
 WORKDIR /app
 
-# Salin package.json dan package-lock.json
+# Install dependencies sistem untuk Chromium
 COPY package*.json ./
-
-# Install dependencies sistem untuk Chromium + bersihkan cache
 RUN apt-get update && \
     apt-get install -y \
       gconf-service libasound2 libatk1.0-0 libcups2 libx11-xcb1 \
@@ -15,14 +12,11 @@ RUN apt-get update && \
       fonts-liberation wget curl ca-certificates --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
-# Install node dependencies (termasuk Puppeteer chromium)
+# Install node modules (puppeteer-core akan mengunduh Chromium yang cocok)
 RUN npm install --production
 
-# Salin semua kode
+# Salin kode aplikasi
 COPY . .
 
-# Ekspos port aplikasi
 EXPOSE 3000
-
-# Jalankan server
 CMD ["node", "index.js"]

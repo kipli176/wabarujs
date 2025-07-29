@@ -2,6 +2,7 @@
  * index.js
  *
  * Server Node.js untuk mengirim pesan WhatsApp melalui endpoint JSON /send-message
+ * Menggunakan whatsapp-web.js versi terbaru dengan LocalAuth dan guard client ready
  *
  * Dependensi:
  *   npm install express whatsapp-web.js qrcode-terminal
@@ -17,7 +18,9 @@ const express = require('express');
 const app = express();
 app.use(express.json());
 
-// Konfigurasi client WhatsApp dengan LocalAuth dan opsi Puppeteer
+let isClientReady = false;
+
+// Inisialisasi WhatsApp client
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -39,7 +42,13 @@ client.on('qr', qr => {
 });
 
 client.on('ready', () => {
+    isClientReady = true;
     console.log('Client WhatsApp siap!');
+    // Mulai server setelah client siap
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+        console.log(`Server berjalan di http://localhost:${PORT}`);
+    });
 });
 
 client.on('auth_failure', msg => {
@@ -50,24 +59,21 @@ client.initialize();
 
 // Endpoint untuk mengirim pesan
 app.post('/send-message', async (req, res) => {
+    if (!isClientReady) {
+        return res.status(503).json({ status: 'error', message: 'WhatsApp client belum siap. Silakan tunggu beberapa detik.' });
+    }
     const { number, message } = req.body;
     if (!number || !message) {
         return res.status(400).json({ status: 'error', message: 'Nomor dan pesan wajib diisi.' });
     }
 
-    // Format nomor: kode negara + nomor tanpa '+' atau spasi
+    // Format nomor: e.g. '6281234567890' -> '6281234567890@c.us'
     const chatId = number.includes('@c.us') ? number : `${number}@c.us`;
     try {
         const sent = await client.sendMessage(chatId, message);
-        res.json({ status: 'success', id: sent.id._serialized });
+        return res.json({ status: 'success', id: sent.id._serialized });
     } catch (error) {
         console.error('Send message error:', error);
-        res.status(500).json({ status: 'error', message: 'Gagal mengirim pesan.', error: error.message });
+        return res.status(500).json({ status: 'error', message: 'Gagal mengirim pesan.', error: error.message });
     }
-});
-
-// Jalankan server pada port 3000
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server berjalan di http://localhost:${PORT}`);
 });
