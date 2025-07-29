@@ -2,8 +2,9 @@ FROM node:18-slim
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install
+# Inisialisasi project kosong dan install deps
+RUN npm init -y \
+ && npm install express qrcode baileys@6.7.18
 
 COPY . .
 
