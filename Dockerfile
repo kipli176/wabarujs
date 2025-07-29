@@ -1,15 +1,10 @@
-# Dockerfile
-FROM node:20-slim
+FROM node:24-slim
 
 WORKDIR /app
 
-# Install dependencies
-RUN npm install qrcode-terminal@0.12.0 baileys@6.7.18
+RUN npm init -y
+RUN npm install @whiskeysockets/baileys@6.7.18 qrcode-terminal@0.12.0
 
-# Copy source
 COPY . .
 
-# Build jika menggunakan TS (opsional)
-RUN npm run build || echo "no build script"
-
-CMD ["node", "dist/index.js"]
+CMD ["node", "index.js"]
