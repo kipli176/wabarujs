@@ -4,11 +4,10 @@
  * Server Node.js untuk mengirim pesan WhatsApp melalui endpoint JSON /send-message
  * Menggunakan whatsapp-web.js versi terbaru dengan LocalAuth dan guard client ready
  *
- * Dependensi:
- *   npm install express whatsapp-web.js qrcode-terminal
- *
- * Menjalankan:
- *   node index.js
+ * Langkah:
+ * 1. Buat file ini sebagai index.js
+ * 2. Jalankan `npm install`
+ * 3. Jalankan `npm start` atau `node index.js`
  */
 
 const { Client, LocalAuth } = require('whatsapp-web.js');
@@ -20,7 +19,7 @@ app.use(express.json());
 
 let isClientReady = false;
 
-// Inisialisasi WhatsApp client
+// Inisialisasi WhatsApp client dengan LocalAuth
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -37,7 +36,7 @@ const client = new Client({
 });
 
 client.on('qr', qr => {
-    console.log('QR RECEIVED, scan dengan WhatsApp mobile:');
+    console.log('QR RECEIVED, silakan scan dengan WhatsApp mobile:');
     qrcode.generate(qr, { small: true });
 });
 
