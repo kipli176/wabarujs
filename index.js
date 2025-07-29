@@ -18,12 +18,12 @@ const app = express();
 app.use(express.json());
 
 // Inisialisasi client WhatsApp dengan LocalAuth dan opsi Puppeteer
+typeof process.env.PUPPETEER_EXECUTABLE_PATH === 'undefined' && console.warn('PUPPETEER_EXECUTABLE_PATH tidak diset, menggunakan default /usr/bin/chromium');
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
         headless: true,
-        defaultViewport: null,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -31,8 +31,7 @@ const client = new Client({
             '--disable-extensions',
             '--disable-gpu',
             '--window-size=1280,800'
-        ],
-        ignoreDefaultArgs: ['--enable-automation']
+        ]
     }
 });
 
@@ -57,10 +56,9 @@ app.post('/send-message', async (req, res) => {
     // Format nomor: kode negara + nomor tanpa '+' atau spasi
     const chatId = number.includes('@c.us') ? number : `${number}@c.us`;
     try {
-        // Pastikan chat sudah ada atau dibuat
-        const chat = await client.getChatById(chatId);
-        const sentMsg = await chat.sendMessage(message);
-        res.json({ status: 'success', id: sentMsg.id._serialized });
+        // Kirim pesan langsung tanpa getChat
+        const sent = await client.sendMessage(chatId, message);
+        res.json({ status: 'success', id: sent.id._serialized });
     } catch (error) {
         res.status(500).json({ status: 'error', message: 'Gagal mengirim pesan.', error: error.message });
     }
