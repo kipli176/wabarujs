@@ -1,30 +1,28 @@
-
-# Gunakan image Node.js slim dengan dukungan Chromium
 FROM node:18-slim
 
-# Install Chromium untuk Puppeteer
-RUN apt-get update && \
-    apt-get install -y chromium --no-install-recommends && \
-    rm -rf /var/lib/apt/lists/*
-
-# Atur path executable Chromium bagi Puppeteer
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-
-# Set direktori kerja di container
+# Set direktori kerja
 WORKDIR /app
 
-# Salin file package.json dan package-lock.json
+# Salin package.json dan package-lock.json
 COPY package*.json ./
 
-# Instalasi dependensi (tanpa download Chromium lagi)
+# Install dependencies sistem untuk Chromium + bersihkan cache
+RUN apt-get update && \
+    apt-get install -y \
+      gconf-service libasound2 libatk1.0-0 libcups2 libx11-xcb1 \
+      libxcomposite1 libxdamage1 libxrandr2 libgtk-3-0 libgbm1 \
+      libpango1.0-0 libxshmfence1 libnss3 libxss1 libxtst6 \
+      fonts-liberation wget curl ca-certificates --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install node dependencies (termasuk Puppeteer chromium)
 RUN npm install --production
 
-# Salin semua file kode ke dalam container
+# Salin semua kode
 COPY . .
 
 # Ekspos port aplikasi
 EXPOSE 3000
 
-# Perintah menjalankan server
+# Jalankan server
 CMD ["node", "index.js"]
