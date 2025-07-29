@@ -1,66 +1,63 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
-const express = require('express');
+const express = require("express");
+const { Client, LocalAuth } = require("whatsapp-web.js");
+const qrcode = require("qrcode-terminal");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
 app.use(express.json());
 
-let isClientReady = false;
-
-// Inisialisasi WhatsApp client dengan LocalAuth
+// Inisialisasi WhatsApp client
 const client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: {
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-extensions',
-            '--disable-gpu',
-            '--window-size=1280,800'
-        ]
-    }
+  authStrategy: new LocalAuth({
+    dataPath: "./session" // untuk persistent session
+  }),
+  puppeteer: {
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    executablePath: process.env.CHROME_PATH || "/usr/bin/chromium"
+  }
 });
 
-client.on('qr', qr => {
-    console.log('QR RECEIVED, silakan scan dengan WhatsApp mobile:');
-    qrcode.generate(qr, { small: true });
+// Tampilkan QR di terminal saat pertama kali
+client.on("qr", qr => {
+  console.log("Scan QR berikut untuk login:");
+  qrcode.generate(qr, { small: true });
 });
 
-client.on('ready', () => {
-    isClientReady = true;
-    console.log('Client WhatsApp siap!');
-    // Mulai server setelah client siap
-    const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
-        console.log(`Server berjalan di http://localhost:${PORT}`);
-    });
+// Konfirmasi siap
+client.on("ready", () => {
+  console.log("✅ WhatsApp client is ready!");
 });
 
-client.on('auth_failure', msg => {
-    console.error('Authentication failure:', msg);
+// Endpoint cek status
+app.get("/", (req, res) => {
+  res.send({ status: "WhatsApp bot is running." });
 });
 
+// Endpoint kirim pesan
+app.post("/send-message", async (req, res) => {
+  const { number, message } = req.body;
+  if (!number || !message) {
+    return res.status(400).send({ error: "Missing number or message" });
+  }
+
+  const chatId = number.includes("@c.us") ? number : `${number}@c.us`;
+
+  try {
+    await client.sendMessage(chatId, message);
+    res.send({ status: "Message sent", number, message });
+  } catch (err) {
+    console.error("Error sending message:", err.message);
+    res.status(500).send({ error: "Failed to send message", detail: err.message });
+  }
+});
+
+// Mulai WhatsApp client & server Express
 client.initialize();
-
-// Endpoint untuk mengirim pesan
-app.post('/send-message', async (req, res) => {
-    if (!isClientReady) {
-        return res.status(503).json({ status: 'error', message: 'WhatsApp client belum siap. Silakan tunggu beberapa detik.' });
-    }
-    const { number, message } = req.body;
-    if (!number || !message) {
-        return res.status(400).json({ status: 'error', message: 'Nomor dan pesan wajib diisi.' });
-    }
-
-    // Format nomor: '6281234567890' -> '6281234567890@c.us'
-    const chatId = number.includes('@c.us') ? number : `${number}@c.us`;
-    try {
-        const sent = await client.sendMessage(chatId, message);
-        return res.json({ status: 'success', id: sent.id._serialized });
-    } catch (error) {
-        console.error('Send message error:', error);
-        return res.status(500).json({ status: 'error', message: 'Gagal mengirim pesan.', error: error.message });
-    }
+app.listen(PORT, () => {
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
