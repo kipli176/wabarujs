@@ -23,6 +23,7 @@ const client = new Client({
     puppeteer: {
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
         headless: true,
+        defaultViewport: null,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -30,7 +31,8 @@ const client = new Client({
             '--disable-extensions',
             '--disable-gpu',
             '--window-size=1280,800'
-        ]
+        ],
+        ignoreDefaultArgs: ['--enable-automation']
     }
 });
 
@@ -55,8 +57,10 @@ app.post('/send-message', async (req, res) => {
     // Format nomor: kode negara + nomor tanpa '+' atau spasi
     const chatId = number.includes('@c.us') ? number : `${number}@c.us`;
     try {
-        const sent = await client.sendMessage(chatId, message);
-        res.json({ status: 'success', id: sent.id._serialized });
+        // Pastikan chat sudah ada atau dibuat
+        const chat = await client.getChatById(chatId);
+        const sentMsg = await chat.sendMessage(message);
+        res.json({ status: 'success', id: sentMsg.id._serialized });
     } catch (error) {
         res.status(500).json({ status: 'error', message: 'Gagal mengirim pesan.', error: error.message });
     }
