@@ -1,19 +1,15 @@
+# Dockerfile
 FROM node:20-slim
 
-# Siapkan direktori kerja
 WORKDIR /app
 
-# Install Git karena baileys butuh (untuk dependencies dari GitHub)
-RUN apt-get update && apt-get install -y git curl nano && rm -rf /var/lib/apt/lists/*
+# Install dependencies
+RUN npm install qrcode-terminal@0.12.0 baileys@6.7.18
 
-# Install dependencies langsung TANPA package.json
-RUN npm install express qrcode baileys@6.6.0
-
-# Salin semua file dari host ke container
+# Copy source
 COPY . .
 
-# Expose port aplikasi
-EXPOSE 3000
+# Build jika menggunakan TS (opsional)
+RUN npm run build || echo "no build script"
 
-# Jalankan aplikasi
-CMD ["node", "index.js"]
+CMD ["node", "dist/index.js"]
