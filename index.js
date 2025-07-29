@@ -29,29 +29,36 @@ const qrcode = require("qrcode");
   sock.ev.on("creds.update", saveCreds);
 
   sock.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect, qr } = update;
+    const { connection, lastDisconnect, qr, isOnline } = update;
 
     if (qr) {
       latestQR = await qrcode.toDataURL(qr);
       lastQRGeneratedAt = new Date().toISOString();
       waReady = false;
-    }
-
-    if (connection === "close") {
-      const reason = (lastDisconnect?.error)?.output?.statusCode;
-      waReady = false;
-      if (reason !== DisconnectReason.loggedOut) {
-        console.log("🔄 Reconnecting...");
-      } else {
-        console.log("🔴 Disconnected from WhatsApp.");
-      }
+      console.log("🟡 QR code diperbarui. Silakan scan ulang.");
     }
 
     if (connection === "open") {
       waReady = true;
       latestQR = null;
       lastQRGeneratedAt = null;
-      console.log("✅ WhatsApp connected.");
+      console.log("✅ WhatsApp tersambung dan siap digunakan.");
+    }
+
+    if (connection === "close") {
+      waReady = false;
+      const reason = (lastDisconnect?.error)?.output?.statusCode;
+      console.log("🔴 WhatsApp terputus. Reason code:", reason);
+
+      if (reason === DisconnectReason.loggedOut) {
+        console.log("❌ Anda logout dari WhatsApp. Harus scan QR ulang.");
+      } else {
+        console.log("🔄 Akan mencoba koneksi ulang otomatis...");
+      }
+    }
+
+    if (isOnline !== undefined) {
+      console.log("🌐 Status koneksi:", isOnline ? "Online" : "Offline");
     }
   });
 
@@ -67,9 +74,9 @@ const qrcode = require("qrcode");
     });
   });
 
-  // Serve QR code if needed
+  // Serve QR page
   app.get("/qr", (req, res) => {
-    if (!latestQR) return res.status(404).send("QR belum siap atau sudah tersambung.");
+    if (!latestQR) return res.status(404).send("QR belum siap atau sudah login.");
     res.send(`
       <html>
         <body>
@@ -81,17 +88,17 @@ const qrcode = require("qrcode");
     `);
   });
 
-  // Endpoint kirim pesan
+  // Send message endpoint
   app.post("/send-message", async (req, res) => {
     if (!waReady) {
-      return res.status(503).send({
-        error: "WhatsApp belum terkoneksi. Silakan scan QR terlebih dahulu.",
+      return res.status(503).json({
+        error: "WhatsApp belum terkoneksi. Scan QR terlebih dahulu.",
       });
     }
 
     const { number, message } = req.body;
     if (!number || !message) {
-      return res.status(400).send({ error: "Missing number or message" });
+      return res.status(400).json({ error: "Missing number or message" });
     }
 
     const jid = number.includes("@s.whatsapp.net")
@@ -100,14 +107,14 @@ const qrcode = require("qrcode");
 
     try {
       await sock.sendMessage(jid, { text: message });
-      res.send({ status: "sent", number, message });
+      res.json({ status: "sent", number, message });
     } catch (err) {
-      console.error("❌ Send error:", err.message);
-      res.status(500).send({ error: err.message });
+      console.error("❌ Gagal kirim:", err.message);
+      res.status(500).json({ error: err.message });
     }
   });
 
   app.listen(PORT, () =>
-    console.log(`🚀 Server running at http://localhost:${PORT}`)
+    console.log(`🚀 Server berjalan di http://localhost:${PORT}`)
   );
 })();
